@@ -1,0 +1,282 @@
+:2411.04832v1 [cs.Al] 7 Nov 2024
+
+i
+
+arX
+
+Journal of Machine Learning Research 1337 (2024) 1-48 Submitted 4/00; Published 10/00
+
+Plasticity Loss in Deep Reinforcement Learning: A Survey
+
+Timo Klein TIMO.KLEINQUNIVIE.AC. AT
+Faculty of Computer Science
+
+UniVie Doctoral School Computer Science
+
+University of Vienna
+
+Lukas Miklautz LUKAS.MIKLAUTZ@UNIVIE.AC.AT
+Faculty of Computer Science
+University of Vienna
+
+Kevin Sidak KEVIN.SIDAK@UNIVIE.AC.AT
+Faculty of Computer Science
+
+UniVie Doctoral School Computer Science
+
+University of Vienna
+
+Claudia Plant CLAUDIA.PLANT@UNIVIE.AC. AT
+Faculty of Computer Science
+
+Research Network Data Science
+
+University of Vienna
+
+Sebastian Tschiatschek SEBASTIAN.TSCHIATSCHEK @UNIVIE.AC. AT
+Faculty of Computer Science
+
+Research Network Data Science
+
+University of Vienna
+
+Editor:
+
+Abstract
+
+Akin to neuroplasticity in human brains, the plasticity of deep neural networks enables
+their quick adaption to new data. This makes plasticity particularly crucial for deep Re-
+inforcement Learning (RL) agents: Once plasticity is lost, an agent’s performance will
+inevitably plateau because it cannot improve its policy to account for changes in the data
+distribution, which are a necessary consequence of its learning process. Thus, developing
+well-performing and sample-efficient agents hinges on their ability to remain plastic during
+training. Furthermore, the loss of plasticity can be connected to many other issues plaguing
+deep RL, such as training instabilities, scaling failures, overestimation bias, and insufficient
+exploration. With this survey, we aim to provide an overview of the emerging research on
+plasticity loss for academics and practitioners of deep reinforcement learning. First, we
+propose a unified definition of plasticity loss based on recent works, relate it to definitions
+from the literature, and discuss metrics for measuring plasticity loss. Then, we categorize
+and discuss numerous possible causes of plasticity loss before reviewing currently employed
+mitigation strategies. Our taxonomy is the first systematic overview of the current state of
+the field. Lastly, we discuss prevalent issues within the literature, such as a necessity for
+broader evaluation, and provide recommendations for future research like gaining a better
+understanding between an agent’s neural activity and its behavior.
+
+Keywords: Reinforcement Learning, Plasticity Loss, Continual Learning, Review, Survey
+
+©2024 Klein, Miklautz, Sidak, Plant, and Tschiatschek.
+KLEIN, MIKLAUTZ, SIDAK, PLANT, AND TSCHIATSCHEK
+
+Contents
+
+1 Introduction 3
+
+2 Notation and Preliminaries 4
+2.1 General Notation 4
+2.2 Reinforcement Learning . . .. .. 5
+2.3 Definitions of Effective Rank 6
+2.4 Gradient Covariance Matrix mld Empl cal Neural Tangent Kernel 7
+2.5 Common Benchmarks in Deep Reinforcement Learning and Plasticity L 8
+
+3 Related Work 11
+
+4 Definitions of Plasticity Loss and Related Phenomena 11
+4.1 Definitions of Plasticity Loss 11
+4.2 Plasticity Loss in Other Fields and Related Phenomena 13
+
+5 Causes of Plasticity Loss 13
+5.1 Reduced Capacity due to Saturated Units . . . .. ... ... ... .. 14
+5.2 Effective Rank Collapse . . . . .. 16
+5.3  First-order Optimization Effects 17
+5.4 Second-order Optimization Effects .. 18
+5.5 Non-stationarity . ........... ... 18
+5.6 RegressionLoss . . .. ... ...... L. 20
+5.7 Parameter Norm Growth . .. .. .20
+5.8 High Replay Ratio Training 21
+5.9 Early Overfitting 21
+5.10 Discussion of Causes 22
+
+6 Mitigating Loss of Plasticity
+6.1 Non-targeted Weight Resets . . . . . .
+6.2 Targeted Weight Resets
+6.3 Parameter Regularization
+6.4 Feature Rank Regularization
+6.5 Activation Functions . . . ... ..
+6.6 Categorical L
+6.7 Distillation
+6.8 Other Methods . . .. .......
+6.9 Combined Method
+6.10 Discussion of Mitigation Strategies
+
+7 Factors Influencing Plasticity Loss 42
+8 Current State and Future Directions 45
+8.1 Current Trends . . . ... ... .. ......... .. ... ... ... 45
+8.2 Directions for Future Research . . . ... ... .45
+8.2.1 What are the causes behind Plasticity L 45
+8.2.2 A call for broader evaluation 46
+8.2.3 How do well-known regularizers actually work? 47
+
+8.2.4 What are the Links between Plasticity Loss and Established Deep RL
+Issue: a7
+8.2.5 48
+Prasticity Loss IN DEep RL: A SURVEY
+
+9 Conclusion 49
+
+1. Introduction
+
+Deep Reinforcement Learning (RL) has recently seen many successes and breakthroughs:
+It has beaten the best human players in Go [96] and Dota [11], discovered new matrix
+multiplication algorithms [30], endows language models with the ability to generate human-
+like replies for breaking the Turing test [13], and has allowed for substantial progress in
+robotic control [86]. Its capabilities to react to environmental changes and make near-
+optimal decisions in challenging sequential decision-making problems are likely crucial for
+any generally capable agent. Also, RL’s mode of learning through interaction purely from
+trial-and-error mimics human learning, making it a natural paradigm for modeling learning
+in artificial agents [98].
+
+Despite all the aforementioned successes, deep RL is still in its infancy, and —in many
+ways— deep RL approaches are not yet reliable and mature. For example, most RL algo-
+rithms still use the comparatively small network from the seminal DQN paper [75]. Fur-
+thermore, to reach high levels of performance, deep RL typically needs substantial tweaking
+and elaborate stabilization techniques that are notoriously difficult to get right: From re-
+play buffers and target networks [75] to noise de-correlation [102] and pessimistic value
+functions [33], and finally to idiosyncratic optimizer settings [4, 66] and bespoke hyperpa-
+rameter schedules [94].
+
+There are many reasons why this is the case: First and foremost, deep RL is inherently
+non-stationary, making it a substantially harder learning problem than supervised learning.
+Additionally, it suffers from its own optimization issues, such as under-exploration, sample
+correlation, and overestimation bias. Much recent work has been devoted to tackling these
+problems with ever-more elaborate algorithms, many of them aiming to transfer insights
+from tabular RL to the deep RL setting [18, 88].
+
+But what if the problems in current deep RL can be attributed to a significant
+extent to optimization pathologies arising from applying deep neural networks
+to non-stationary tasks [12, 34, 80]7 Recently, this view has gained traction under the
+umbrella term plasticity loss. In the context of deep learning, plasticity refers to a network’s
+ability to quickly adapt to new targets. Consequently, plasticity loss characterizes a network
+state associated with a lost ability to learn. There is hope and evidence that if the problem
+of plasticity loss is resolved, this will also alleviate many of the aforementioned RL-specific
+challenges. The line of work on plasticity loss can be broadly described as trying to find
+answers to the following two main research questions:
+
+%
+
+o Why do the neural networks of deep RL agents lose their learning ability [26, 66, 68,
+80, 82, 97]?
+
+« How can the ability to learn be maintained [24, 61, 62]?
+
+These questions are not only relevant for RL but also cover issues relevant to most modern
+machine learning: They address the fundamental problem of applying machine learning
+techniques in settings requiring adaptation to changing circumstances. This makes plasticity
+loss not just relevant for deep RL, but also for other areas applying deep learning, e.g.,
+KLEIN, MIKLAUTZ, SIDAK, PLANT, AND TSCHIATSCHEK
+
+continual learning [26] or the ubiquitous pre-train/fine-tune setup in supervised learning [10,
+
+Scope The focus of this survey is on the phenomenon of plasticity loss in deep RL. As
+mentioned above, plasticity loss also occurs in continual learning or supervised learning,
+and while our survey touches on these settings, they are not our focus. Some surveys
+on continual learning also cover plasticity loss and catastrophic forgetting [104] but do
+not exclusively focus on plasticity loss—as we do—, thereby naturally limiting the depths
+of the exposition. Our in-depth focus on plasticity loss also distinguishes our work from
+Khetarpal et al. [53]’s survey, which discus several relevant RL-specific sub-areas such
+as credit assignment or skill learning. In our survey, we emphasize connections between
+plasticity loss and other issues afflicting deep RL, such as overestimation bias [80] and its
+inability to scale [29]. Within deep RL, we concentrate on the single-agent setting, as the
+understanding of plasticity loss is most advanced there.
+
+Structure Our survey starts with an overview of the RL formalism and definitions rele-
+vant to plasticity loss in Section 4. As we will see, plasticity loss is intuitively easy to define
+as networks losing their ability to learn, but there is no single accepted definition in the
+literature yet. We also use this section to review different experimental setups to test for
+plasticity loss, including synthetic benchmarks and RL environments. Next, we categorize
+and present possible hypothesized causes for plasticity loss from the literature in Section 5,
+followed by a taxonomy of currently deployed remedies (Section 6). Section 7 then discusses
+some of the factors that deep RL researchers and practitioners should consider when using
+deep RL algorithms from the perspective of plasticity loss. Finally, our survey concludes
+with a discussion of the current state of the field and an outlook on future directions in
+Section 8.
+
+2. Notation and Preliminaries
+
+This section introduces our notation and presents some relevant quantities subsequently
+used to describe causes and mitigation strategies of plasticity loss. In particular, Section 2.3
+presents multiple definitions of a network’s feature rank used to measure a representation’s
+quality. These form the basis of multiple regularizes in Section 6.4. In Section 2.4, we also
+introduce the gradient covariance matrix, which can be used to analyze a network’s opti-
+mization landscape. Lastly, Section 2.5 reviews synthetic benchmarks and RL environments
+used to study plasticity loss.
+
+2.1 General Notation
+
+‘We adopt the following notation: We use lower-case bold symbols for vectors, e.g., x € X C
+R? to denote an input sample from the data space X' of dimension d'. Upper-case bold
+symbols denote matrices, e.g., X € R™4" denotes the design matrix whose rows contain
+samples from X. Expectations with respect to a distribution P are denoted as E,p[-]. If
+it is clear from the context, we skip the subscript for brevity. We use SVD(A) to denote
+the multiset of all singular values of A, ¢ to denote a single singular value, o;(A) to denote
+the ith largest singular value of matrix A and omin and omax to denote the smallest and
+largest singular value, respectively. For ¢: RY — R4 being a function mapping samples to
+
+Prasticity Loss IN DEep RL: A SURVEY
+
+features, we denote the feature matrix as ¢(X) € R"*%, where d is the dimension of the
+representation.
+
+2.2 Reinforcement Learning
+
+Reinforcement learning is concerned with optimizing intelligent agents’ actions via trial-and-
+error to maximize the so-called cumulative reward (defined below). The agents’ interactions
+with an environment are formalized via Markov Decision Processes (MDPs) that can be
+described as tuples M = (S, A,P,r,po,7v), where S is the state space, A is the action
+space, i.e., set of possible actions, P: S x 8 x A — [0,1] is the transition kernel specifying
+the probability of transitioning from one state to another state upon taking a specific action,
+r: S x A — R is the reward function specifying the reward the agent obtains for taking
+an action in a state, pg is the initial state distribution, and 7 is the so-called discount
+factor. The behavior of an agent is defined by its possibly stochastic policy m: S — [0, 1]‘*“
+specifying for each state a distribution over the actions the agent can take. We often write
+7(als) to denote the probability of action @ in state s according to policy . The agent aims
+to maximize the (discounted) cumulative reward
+
+J(m) —E [i Yr(sia) | n] , )
+
+=0
+where the expectation is over the randomness of the transitions, the agent’s policy, and the
+initial state. An optimal policy 7* maximizes J(r).
+Key quantities for RL algorithms are the state-value,
+
+=0
+
+2
+
+i.e., the expected cumulative reward when starting from state s and following policy 7 from
+there, and the action-value,
+
+Q"(s,a) =E [iw’r(st,at) | s =s,a9= a} s (3)
+=0
+
+i.e., the expected return starting from state s, taking action a, and following policy =
+afterwards. An optimal policy can be found by maximizing the expected value of the initial
+state, i.e.,
+
+7 € arg max S]NEP [V7(s)] @
+
+Note that state-values (and, similarly, action-values) can also be defined recursively:
+
+Vi(s)= E [r(s.a
+
+a~r(s)
+
+(5)
+
+Inspired by these recursive definitions are so-called temporal-difference learning approaches,
+e.g., approaches based on iteratively updating state-value estimates as
+
+V(1) = V7 (s0) + alreps + 9V (s040) = V7(s4)]- (6)
+—_
+TD error
+
+=

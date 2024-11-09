@@ -1,0 +1,1214 @@
+arXiv:2411.04787v1 [cs.RO] 7 Nov 2024
+
+AllGaits: Learning All Quadruped Gaits and Transitions
+
+Guillaume Bellegarda, Milad Shafiee, Auke Ijspeert
+
+Abstract—We present a framework for learning a
+policy capable of producing all quadruped gaits and transi
+The framework consists of a policy trained with deep
+reinforcement learning (DRL) to modulate the parameters of a
+system of abstract oscillators (i.e. Central Pattern Generator),
+whose output is mapped to joint commands through a pattern
+formation layer that sets the gait style, i.e. body height, swing
+foot ground clearance height, and foot offset. Different gaits are
+formed by changing the coupling between different oscillators,
+which can be instantaneously selected at any velocity by a user.
+With this framework, we systematically investigate which gait
+should be used at which velocity, and when gait transitions
+should occur from a Cost of Transport (COT), i.e. energy-
+efficiency, point of view. Additionally, we note how gait style
+changes as a function of locomotion speed for each gait to keep
+the most energy-efficient locomotion. While the currently most
+popular gait (trot) does not result in the lowest COT, we find
+that considering different co-dependent metrics such as mean
+base velocity and joint acceleration result in different ‘optimal’
+gaits than those that minimize COT. We deploy our controller in
+various hardware experiments, showing all 9 typical quadruped
+animal gaits, and demonstrate generalizability to unseen gaits
+during training, and robustness to leg failures. Video results
+can be found at https://youtu.be/OLoWSX_R868.
+
+I. INTRODUCTION
+
+Animals seamlessly transition between different gaits as
+they change speeds, or to react to variable terrain. Such
+transitions emerge through inter-limb coordination governed
+by the interaction between the brain, the spinal cord, and
+the musculoskeletal system [1]. Several hypotheses have
+been proposed as explanations for why the gait transitions
+oceur: to minimize energy expenditure [2], minimize peak
+musculoskeletal forces [3], maximize periodicity [4], and,
+recently, promote viability, by formalizing the notion of
+avoiding a fall during locomotion [5]. Gaits themselves can
+be formed through several different biological mechanisms,
+for example semsory driven [6], through descending
+drive [7], or coupling driven through Central Pattern
+Generators (CPGs) in the spinal cord [8].
+
+In robotics, quadruped robots are displaying complex
+motor skills with different gaits to locomote at varying speeds
+and across challenging terrains, including combinations of
+discrete capabilities like running and jumping [9]-[15].
+While several works study transitions between such gaits
+(for example), the optimal transition times, speeds, and
+between which discrete gaits remains an open question.
+Additionally, for frameworks that do show transitions
+between gaits, the parameters must often be re-tuned for
+each (MPC) [16], may have heuristics for transitioning [17],
+
+‘This research is supported by the Swiss National Science Foundation
+(SNSF) as part of project No.197237. The authors are with the
+BioRobotics Laboratory, Ecole Polytechnique Federale de Lausanne
+(EPFL). {firstname.lastname}@epfl.ch
+
+Fig. 1: AllGaits: snapshots from leaming all quadruped gaits with Central
+Pattern Generators and deep reinforcement learing
+
+or may otherwise be non-optimal, as the cyclic motions
+may affect the body and joints differently. For example, in
+contrast with most robots (with some exceptions [18], [19]).
+animals do not bound with a rigid spine.
+
+For quadruped robots, gaits can be encoded in a biological
+neural network (CPG) [8], [20]-[22], enforced through a
+fixed pattern in optimal control frameworks [16], [23], [24].
+specifically rewarded in learning frameworks through a
+reward function [25], [26], or can emerge naturally during
+the training process [27]-{29]. One observation is that
+learned controllers working at a wide range of speeds
+seem to converge to trot gaits, especially when the reward
+function has terms penalizing non-stable motions, as the
+trot gait minimizes body angular velocities even at high
+speeds [30], [31]. This is in contrast to high-speed gaits
+found in nature, where flexible spines exhibit significant
+bending movement while quadruped animals bound or
+gallop [32], or for Springboks and Thomson’s gazelles
+exhibit stotting (or pronking) behaviors [33].
+
+Reinforcement learning has been applied to directly imi-
+tate animal motions such as pacing and trotting through train-
+ing separate policies that reward tracking different mocap
+data [34]. Generating a library of reference trajectories and
+training a goal-conditioned policy to imitate them, and ex-
+plicitly providing transition and coupling strength timing can
+also lead to executing gait transitions [17]. By training three
+policies to locomote at specific velocities (0.375 m/s, 0.9
+m/s, 1.5 m/s) while minimizing energy consumption, three
+corresponding distinct gaits emerged (walk, trot, pronk) [29].
+Then, using these three policies as experts, the transition
+between different speeds and gaits was realized to locomote
+between 0.375—1.5 m/s. Transitions between gaits can also
+be realized by training a high-level gait policy that specifies
+gait patterns of each foot, while a low-level convex MPC
+controller optimizes the motor commands so that the robot
+can walk at a desired velocity using that gait pattern [35].
+Combining learning with bio-inspired representations of
+neural circuits allows for higher centers to modulate and
+coordinate gaits [36]-[38], which can also result in the emer-
+gence of terrain-driven gait transitions to successfully cross
+variable gaps [5], [39]. As an alternative to learning-based
+control, quadruped robots have also demonstrated gait gen-
+eration and transitions can occur through simple force feed-
+back, without explicit coupling between oscillators [6], [40].
+
+A. Contribution
+
+While gait transitions can occur through sensory
+feedback [6] and/or through descending drives [7]. in
+this paper we take a coupling-driven approach to learn to
+locomote with, and transition between, a variety of gaits.
+Coupling between different abstract oscillators is commonly
+used for CPG-based locomotion control of different gaits in
+bio-inspired robotics [20], [21], [41].
+
+While several common quadrupedal gaits have been
+successfully demonstrated on quadruped hardware, previous
+work requires either explicit parameter tuning in MPC [16],
+extensive reward function tuning [17], [25], specific training
+schemes [29], or expert demonstrations from animals or
+MPC to imitate [34]. In contrast, we show all quadruped
+gaits and their transitions can be realized without reward
+function tuning or any expert demonstrations.
+
+We center our scientific investigation around three
+fundamental biological and robotics locomotion questions:
+
+1. Which gaits are most efficient at which velocities, and
+when should gait transitions occur?
+
+2. How should parameters like body height, posture, and
+swing foot trajectories change for different gaits at
+different velocities?
+
+3. Can we produce novel gaits not seen during training,
+and how robust is the policy to leg failures?
+
+In order to answer these questions, we present a hierar-
+chical bio-inspired architecture consisting of a policy trained
+with DRL (higher centers), a network of coupled oscillators
+mapped to task space foot trajectories (rhythm generator
+and pattern formation layers of the spinal cord), and sensory
+feedback from onboard sensors and internal CPG states
+(efference copy of the spinal cord). We explicitly enforce a
+gait through the coupling matrix, and the locomotion style
+through the pattern formation parameters (i.e. body height,
+swing foot ground clearance, foot offsets). We leverage this
+
+architecture to produce all quadrupedal gaits, determine when
+the optimal transitions between gaits should occur, and with
+which locomotion style. Additionally, we are able to realize
+novel gaits that were not seen during training, and have not
+been previously shown, without any modifications directly
+in hardware experiments. Furthermore, our framework is
+robust to failures of either one or two disabled legs.
+
+The rest of this paper is organized as follows. In
+Section II we present AllGaits, including our design choices
+and integration of Central Pattern Generators into the deep
+reinforcement learning framework to learn to locomote
+with all quadruped gaits. In Section III we discuss results
+and analysis from learning our controller and sim-to-real
+transfers, and we give a brief conclusion in Section IV.
+
+II. LEARNING CENTRAL PATTERN GENERATORS
+FOR ALL QUADRUPEDAL GAITS
+
+In this section we describe our CPG-integrated reinforce-
+ment learning framework and design decisions for learning
+locomotion controllers to produce all quadrupedal gaits. Fig-
+ure 2 shows an overview of our framework and the parallel
+with biological systems, where output from higher centers
+(the policy network) modulates the spinal cord (rhythm
+generation and pattern formation layers), finally actuating
+the motors (muscles). We use CPG-RL [36] as a basis,
+where now we include coupling matrices to define each of
+the following gaits: Walk, Amble, Trot, Pace, Bound, Pronk,
+Canter, Transverse Gallop, and Rotary Gallop (Figure 3).
+
+A. Rhythm Generation and Pattern Formation
+
+The abstract oscillators which form our Rhythm
+Generation layer are defined as:
+
+_ (" . ) 1
+
+fi=a 4(.“1*71)*71 [S]
+
+Wit Y rswisin(0;—0;—64) )
+
+where 7; is the current amplitude of the oscillator, 6; is the
+phase of the oscillator, y; and w; are the intrinsic amplitude
+and frequency, a is a positive constant representing the
+convergence factor. Couplings between oscillators are
+defined by the weights w;; and phase biases ¢;;. For a
+quadruped robot with a single oscillator corresponding
+to each leg, the coupling matrices ® can be defined by
+following the timings from Figure 3. The row/column order
+is Front Right (FR), Front Left (FL), Hind Right (HR),
+Hind Left (HL). These matrices define the offsets between
+different oscillators to converge to the desired gaits. With
+appropriately high (strong) coupling weights, i.e. w;; = 10,
+these coupling matrices enforce the gait.
+
+As in CPG-RL [36], to map from the oscillator states to
+Jjoint commands, we first compute corresponding desired foot
+positions, and then calculate the desired joint positions with
+inverse kinematics. The desired foot position coordinates
+are given as follow:
+
+Zi oot = To f f — Astep(ri —1)cos () 3)
+
+) =h+tgesin() if sin(0;) >0
+T “htgpsin(0;)  otherwise
+
+“)
+Higher Centers
+(Policy)
+
+Central Feedback (efference copy)
+.00
+
+Fig. 2: AllGaits: Control architecture for learning central pattern generators to locomote at all gaits for quadruped robots. The observation cor
+velocity commands, proprioceptive measurements, and the current CPG states (efference copy of the spinal cord), which the policy network uses to
+
+e
+Body Height, Ground
+Clearance, Foot Offset
+
+Body Orienttion,
+Lin/Ang. Velociies
+
+CPG parameters 1 and w for each leg i (Front Right (FR), Front Left (FL), Hind Right (HR), Hind Left (HL)) to coordinate the Rhythm Generation.
+A gait coupling matrix is input from the user to set a particular gait. The resulting CPG states are then mapped to desired foot positions in a Pattern
+
+Formation layer, which the user can also directly modulate by
+
+ting body height h, swing foot ground clearance ge. and foot offset from the hip
+‘This task-space mapping is then converted to desired joint angles with inverse kinema
+
+and finally tracked with joint PD control to produce torques
+
+7. The control policy selects actions at 100 Hz, and all other blocks operate at 1 kHz.
+
+o o O, O
+
+025
+Lateral Sequence Walk
+
+075 03 05 00
+Amble
+
+05 o 00 o5
+
+Trot Pace
+
+Fig. 3: Contact timing for each foot with the ground as a percentage of a single gait cycle for various quadruped gai
+‘Trot, Pace, Bound, Pronk, Canter, Transverse Gallop (T.G.), Rotary Gallop (R.G.). These timings are converted to matri
+between different limbs in column order: Front Right (FR). Front Left (FL), Hind Right (HR), Hind Left (HL),
+
+where dtep is the maximum step length, x,fy is the foot
+offset with respect to the hip, h is the robot height, g. is
+the max ground clearance during swing, and g, is the max
+ground penetration during stance. A visualization of the
+foot trajectory for a set of these parameters is shown in the
+Pattern Formation block of Figure 2.
+
+We re-sample h, T,/ 7, ge, and g, during training so the
+agent can learn to locomote with varying base heights, foot
+offsets, swing foot ground clearances, and stance foot ground
+penetrations. We use the following ranges during training:
+h € [0.18,0.35], zor; € [~0.08,0.03], g. € [0.02,0.12],
+9p€[0,0.015]. Thi important to vary in order to find the
+optimal combination, which is unlikely to be the same for
+each different gait. The agent does not receive any explicit
+observation of these parameters, and the user can specify
+each of these parameters during deployment.
+
+B. Markov Decision Process
+
+1) Action Space: As in CPG-RL [36], our action space
+provides an interface for the agent to directly modulate the
+intrinsic oscillator amplitudes and phases, by learning to
+modulate ; and w; for each leg. This allows the agent to
+adapt each of these states online in real-time depending on
+sensory inputs. However, in contrast with our previous work,
+the strong coupling enforces the relative offsets between dif-
+ferent oscillators, meaning the agent is forced to learn param-
+eters to locomote with each particular gait. During training,
+we resample the coupling matrices randomly among each of
+the 9 gaits so the agent can learn to locomote with all gaits, as
+well as transition between different gaits without falling. Our
+action space can be summarized as a = [p.w] € R®. The agent
+selects these parameters at 100 Hz, and we use the following
+
+O
+
+Bound
+
+©) O O O
+
+05 00 00 00 03 00 01 0o 01
+
+Pronk Canter  Transverse Gallop  Rotary Gallop
+
+teral Sequence Walk, Amble,
+s that denote phase offsets
+s they appear in Equation 2.
+
+TABLE I: Reward function terms. (-)" represens a desired command, and
+F(w):=exp(~ ). dt=0.01 is the control policy time step.
+
+Name Formula Weight
+Tinear velocity tracking v, J(v;., Vo) 3dt
+Linear velocity penalty vy, ;- =g y=I? 2dt
+
+Angular velocity penalty wp py>  —||wp 2y 2] 0.1dt
+
+Power |7l 0.001d¢
+
+action space ranges during training: € [1,2], w€[0,8] Hz.
+
+2) Observation Space: As in the full observation space of
+our previous work [36], our observation space includes veloc-
+ity commands, the body state (orientation, linear and angular
+velocities), joint state (positions, velocities), and foot contact
+booleans. We also include the last action chosen by the policy
+network and CPG states (i.e. efference copy of the spinal
+cord) {r,#,0,0} as feedback to the policy (i.c. higher cen-
+ters). Notably, the agent is not directly aware of any coupling
+matrices (i.e. gaits), nor mapping parameters h, Zof 5, ges Gp-
+
+3) Reward Function: Similarly to CPG-RL [36], our
+reward function primarily rewards tracking body linear
+and angular velocity in the base frame. Since in this work
+we focus on learning gaits during forward locomotion,
+in addition to forward velocity tracking, we add terms to
+minimize other undesired base velocities (lateral/vertical
+oscillations in the base y and z direction, and base roll,
+pitch, and yaw rates). To minimize energy consumption, we
+penalize the total power. The terms and respective weights
+are summarized in Table I. We emphasize that we do not
+need to add any reward terms beyond those fully specifying
+the base motion behavior. Notably, we do not need to
+specify any ‘style’ rewards to try to enforce any particular
+gait, base height, foot ground clearance, etc.
+
+C. Training Details
+
+We use Isaac Gym and PhysX as our training environment
+and physics engine [42], [43], and the Unitree Gol
+quadruped [44]. This framework has high throughput,
+enabling us to simulate 4096 Gols in parallel on a single
+NVIDIA RTX 3090 GPU, which allows us to learn
+control policies within minutes with the Proximal Policy
+Optimization (PPO) algorithm [45]. We use the same
+hyperparameters and neural network architecture as in [36].
+
+We train on flat terrain, and we reset the environment
+for an agent if the base or a thigh comes in contact with
+the ground, or if the episode length reaches 20 seconds.
+With each reset, we sample new parameters %, g, g, and
+2,f¢ for mapping the oscillator states to motor commands,
+allowing the agent to learn continuous locomotion behavior
+at varying body heights, step heights, and postures. New
+velocity commands v;, are sampled every 5 seconds, and
+the gait coupling matrix & is re-sampled every 3 seconds.
+As in our previous work, we apply domain randomization
+on the physical mass properties and coefficient of friction
+(Table 1I). Finally, an external push of up to 0.5 m/s is
+applied in a random direction to the base every 15 seconds.
+
+The policy network outputs modulation signals at 100
+Hz, and the torques computed from the mapped desired
+joint positions are updated at 1 kHz. The equations for each
+of the oscillators (Equations 1-2) are thus also integrated
+at 1 kHz. During training we re-sample joint PD controller
+gains at each environment reset as described in Table II.
+
+I1I. EXPERIMENTAL RESULTS AND DISCUSSION
+
+In this section we report and discuss results from learning
+a single controller capable of locomotion with each of the 9
+gaits. Sample locomotion policy deployment snapshots are
+shown in Figure 1, and the reader is encouraged to watch
+the supplementary video for clear visualizations.
+
+A. Gait Style Parameter Efficiency
+
+We first investigate the effects of different gaits and style
+parameters on the Cost of Transport (COT). After training,
+we consider the following style parameters (body height h,
+foot ground clearance g., foot offset x,) for each gait:
+
+h={0.18, 0.22, 0.26, 0.30, 0.34}
+9.=1{0.02, 0.05, 0.08, 0.12}
+Zofr={—0.075, —0.05, —0.025, 0.0, 0.025}
+
+For each of the possible 100 combinations of these three
+parameters, we command the robot to locomote at 0.3 m/s
+to 3.0 m/s, in increments of 0.1 m/s. For each of these
+28 velocities, we run the policy for 5 seconds across 100
+robots in parallel, and compute the mean Cost of Transport.
+For the purpose of this data collection, we do not include
+any noise in the simulation environment.
+
+Figure 4 shows the effects of varying the three parameters
+on the Cost of Transport, with respect to baseline parameters
+seen in previous works such as [36]: h = 0.3, g. = 0.05,
+Zo55 = 0, shown by the black line. Figure 4-A shows the
+effects of different nominal body heights, from 0.34 m to
+0.18 m, on the Cost of Transport. As can be expected,
+
+TABLE II: Randomized parameters during training and their ranges.
+
+Parameter Lower Bound _ Upper Bound _ Units
+v, 02 3 w/s
+Toint Gain K, 30 100 B
+Joint Gain Ky 05 2 )
+Mass (each body k) 70 130 %
+Added base mass 0 5 kg
+Coeflicient of friction 03 1 B
+
+a more upright posture generally leads to more efficient
+locomotion, with lower COT, as less power is needed at
+the thigh and knee joints to maintain the body height.
+While almost all gaits have the lowest COT throughout
+all velocities for the highest, most upright posture, the
+pronk gait is a notable exception, with the most efficient
+locomotion for a slightly lower nominal base height
+parameter, 0.3 m. However, many gaits have an almost
+identical COT curve when locomoting with body height 0.3
+m or 0.34 m. In the video, we also investigate the effects
+on the COT of changing the nominal swing foot ground
+clearance from 0.02 m to 0.12 m. As can be expected, a
+lower swing foot ground clearance results in a more efficient
+gait, as it requires more energy to bring the foot higher off
+the ground, and this trend is consistent across all gaits.
+Figure 4-B shows the effects of changing the nominal
+center point around which the oscillations take place with
+respect to the hip in the z direction range from —0.075 m
+behind the hip, to 0.025 m in front of the hip. Due to the
+configuration of the legs and body, the overall Center of Mass
+(COM) of the robot lies behind the geometric center of the
+body. Therefore, an offset behind the hips helps to keep the
+COM more at the center of the foot contacts, thereby (gen-
+erally) decreasing energy required to remain upright during
+locomotion. While there is more variability among gaits, and
+even within a single gait as the locomotion velocity changes,
+a general observation is that it is more energy-efficient to
+locomote with the oscillation 2 center point behind the hips.
+
+B. Which Gaits and Styles are Most Energy-Efficient?
+
+Based on the 100 gait styles considered for each of
+the 9 gaits, we present the optimal, most energy-efficient
+locomotion possible for each of the 9 gaits with our
+framework. Figure 5 shows the best possible COT for every
+gait at every velocity at top, and the corresponding gait
+style parameters at bottom. Between gaits, the walk gait
+is most energy-efficient from 0.3-0.9 m/s, and then the
+pace gait results in the lowest COT from 0.9-3.0 m/s,
+while the amble gait is second most-efficient in this range.
+This implies that, contrary to the popular association of
+modern quadruped robots to dogs or cats, the most efficient
+locomotion style for our robot makes it closer to a giraffe,
+camel, elephant, or other pacing and ambling animals.
+
+Notably, as also seen in nature, as locomotion speed
+changes, different gait styles are more optimal from an
+energy-efficiency perspective. For all gaits, there does not
+exist a single set of gait parameters that is optimal at all
+velocities. However, there are certain important trends. As
+suggested in the examples in Figure 4, the most optimal
+parameters at all velocities all use the lowest ground
+clearance, 0.02 m. For most gaits, especially at higher
+®- Walk N ‘Amble N Trot N Pace ) Bound
+8 pronk Caner | TansveseGalop | RoayGaiop i S
+=
+s s & —a
+. . h [20rs=00)
+Velosty (mis)
+Amble ) Trot
+S &_s
+Canter . Transverse Gallop
+Velosty (mis)
+
+Fig. 4: Effects on the Cost of Transport for all gaits from modulating nominal (A) body height. and (B) foot offset relative to the hip around which
+oscillations occur. While the policy is capable of locomotion with all of these gait styles (with notable difficulty for the pronk gait with foot offset
+0.025 m_in front of the hip above 2 m/s). each of these parameters significantly affects the COT, and different combinations of these result in better
+
+energy-efficiency at different velocities, most obviously with respect to the foot offset in (B).
+
+Most Optimal COT for All Gaits
+
+®
+
+08
+
+01
+
+08
+
+m ; D FR— H
+Vet ()
+oy
+e 5
+Trot yed
+Faco oo
+s
+-o0zs
+[ 0028 0
+Garr B
+Tcato Er v
+ catoy “ours
+
+KRNI
+
+Vetoty ()
+Fig. 5: Most optimal Cost of Transport (COT) for all quadruped gaits, and
+corresponding gait style parameters for all velocities with our framework.
+(A): minimum COT possible for each gait. Walk is most optimal for veloci-
+ties below 0.9 /s, and pace is most optimal for higher velocities. (B): cor-
+responding gait style parameters for the minimum COTs in (A), with varying
+body heights h and foot offsets @,y for all gaits. The lowest COTS here
+were all achieved with the lowest swing foot ground clearance g =0.02 m.
+
+o
+
+P
+
+speeds, the highest nominal body height 0.34 m gives the
+most efficient locomotion. However, we see variability in
+the hip offset, which changes most variably within each gait
+as a function of speed to subtly improve the COT.
+
+One interesting observation for the pronk gait is the reverse
+curvature with respect to nominal COT plots, which typically
+have positive parabola-like shapes, with a minimal COT
+at a particular velocity. For the pronk gait, at low speeds,
+the policy has learned to modulate the CPG parameters to
+slowly lean forward, then take a short and fast hop, to more
+efficiently track the mean desired velocity. This is further
+shown in Figure 6 by the mean CPG amplitude and frequency
+selected by the policy to locomote as a function of speed,
+which changes for each gait and style. The amplitude and
+frequency of the oscillators directly correspond to mean step
+
+—Wak —Pronk
+—Amble — Canter
+1 —Tot —T.Galop
+
+—Pace R Galop
+—Bound
+
+Mean Oscilator Ampliudes
+
+s s
+
+Velosity (m's)
+Mean oscillator amplitudes and frequencies for style parameters
+. ge = 0.02, wopf = —0.075, which is optimal for many gaits
+and at many velocities. Notably, the policy coordinates the amplitudes and
+frequencies differently for different gaits.
+
+25 3 s 2
+
+Velocity (mis)
+
+25 3
+
+Fig.
+
+length and mean step frequency. Interestingly, we see several
+inflection points for several gaits, where the strategy changes
+for increasing locomotion speed. This is most obvious for
+the pace and amble gaits, which actually decrease the step
+frequency at higher speeds, while instead locomoting faster
+by increasing the step length. The policy has learned this
+different coordination among gaits in order to maximize the
+returns from our reward function, and without explicit knowl-
+edge of the coupling parameters or gait style, but which it can
+indirectly deduce through observing the CPG and joint states.
+Thus, our framework can also be used as a tool to evaluate
+different locomotion strategies given a particular gait.
+
+C. Is Energy-Efficiency the Most Important Gait Metric?
+While energy-efficiency is often the most popular expla-
+nation for different gait styles at different speeds, why do
+walk and pace gaits not naturally emerge when training loco-
+motion policies with end-to-end deep reinforcement learning
+for quadruped robots? Indeed, most recent results that learn
+robot locomotion on flat or rough terrain show a trot gait
+both at high and low velocities [9], [30], [31]. [43]. However,
+in addition to velocity tracking, typically the reward function
+includes many terms related to base stability to keep smooth
+motions, minimize joint accelerations, limit large forces,
+keep the feet underneath the hips, and promote foot air time
+arXiv:2411.04787v1 [cs.RO] 7 Nov 2024
+
+AllGaits: Learning All Quadruped Gaits and Transitions
+
+Guillaume Bellegarda, Milad Shafiee, Auke Ijspeert
+
+Abstract—We present a framework for learning a
+policy capable of producing all quadruped gaits and transi
+The framework consists of a policy trained with deep
+reinforcement learning (DRL) to modulate the parameters of a
+system of abstract oscillators (i.e. Central Pattern Generator),
+whose output is mapped to joint commands through a pattern
+formation layer that sets the gait style, i.e. body height, swing
+foot ground clearance height, and foot offset. Different gaits are
+formed by changing the coupling between different oscillators,
+which can be instantaneously selected at any velocity by a user.
+With this framework, we systematically investigate which gait
+should be used at which velocity, and when gait transitions
+should occur from a Cost of Transport (COT), i.e. energy-
+efficiency, point of view. Additionally, we note how gait style
+changes as a function of locomotion speed for each gait to keep
+the most energy-efficient locomotion. While the currently most
+popular gait (trot) does not result in the lowest COT, we find
+that considering different co-dependent metrics such as mean
+base velocity and joint acceleration result in different ‘optimal’
+gaits than those that minimize COT. We deploy our controller in
+various hardware experiments, showing all 9 typical quadruped
+animal gaits, and demonstrate generalizability to unseen gaits
+during training, and robustness to leg failures. Video results
+can be found at https://youtu.be/OLoWSX_R868.
+
+I. INTRODUCTION
+
+Animals seamlessly transition between different gaits as
+they change speeds, or to react to variable terrain. Such
+transitions emerge through inter-limb coordination governed
+by the interaction between the brain, the spinal cord, and
+the musculoskeletal system [1]. Several hypotheses have
+been proposed as explanations for why the gait transitions
+oceur: to minimize energy expenditure [2], minimize peak
+musculoskeletal forces [3], maximize periodicity [4], and,
+recently, promote viability, by formalizing the notion of
+avoiding a fall during locomotion [5]. Gaits themselves can
+be formed through several different biological mechanisms,
+for example semsory driven [6], through descending
+drive [7], or coupling driven through Central Pattern
+Generators (CPGs) in the spinal cord [8].
+
+In robotics, quadruped robots are displaying complex
+motor skills with different gaits to locomote at varying speeds
+and across challenging terrains, including combinations of
+discrete capabilities like running and jumping [9]-[15].
+While several works study transitions between such gaits
+(for example), the optimal transition times, speeds, and
+between which discrete gaits remains an open question.
+Additionally, for frameworks that do show transitions
+between gaits, the parameters must often be re-tuned for
+each (MPC) [16], may have heuristics for transitioning [17],
+
+‘This research is supported by the Swiss National Science Foundation
+(SNSF) as part of project No.197237. The authors are with the
+BioRobotics Laboratory, Ecole Polytechnique Federale de Lausanne
+(EPFL). {firstname.lastname}@epfl.ch
+
+Fig. 1: AllGaits: snapshots from leaming all quadruped gaits with Central
+Pattern Generators and deep reinforcement learing
+
+or may otherwise be non-optimal, as the cyclic motions
+may affect the body and joints differently. For example, in
+contrast with most robots (with some exceptions [18], [19]).
+animals do not bound with a rigid spine.
+
+For quadruped robots, gaits can be encoded in a biological
+neural network (CPG) [8], [20]-[22], enforced through a
+fixed pattern in optimal control frameworks [16], [23], [24].
+specifically rewarded in learning frameworks through a
+reward function [25], [26], or can emerge naturally during
+the training process [27]-{29]. One observation is that
+learned controllers working at a wide range of speeds
+seem to converge to trot gaits, especially when the reward
+function has terms penalizing non-stable motions, as the
+trot gait minimizes body angular velocities even at high
+speeds [30], [31]. This is in contrast to high-speed gaits
+found in nature, where flexible spines exhibit significant
+bending movement while quadruped animals bound or
+gallop [32], or for Springboks and Thomson’s gazelles
+exhibit stotting (or pronking) behaviors [33].
+
+Reinforcement learning has been applied to directly imi-
+tate animal motions such as pacing and trotting through train-
+ing separate policies that reward tracking different mocap
+data [34]. Generating a library of reference trajectories and
+training a goal-conditioned policy to imitate them, and ex-
+plicitly providing transition and coupling strength timing can
+also lead to executing gait transitions [17]. By training three
+policies to locomote at specific velocities (0.375 m/s, 0.9
+m/s, 1.5 m/s) while minimizing energy consumption, three
+corresponding distinct gaits emerged (walk, trot, pronk) [29].
+Then, using these three policies as experts, the transition
+between different speeds and gaits was realized to locomote
+between 0.375—1.5 m/s. Transitions between gaits can also
+be realized by training a high-level gait policy that specifies
+gait patterns of each foot, while a low-level convex MPC
+controller optimizes the motor commands so that the robot
+can walk at a desired velocity using that gait pattern [35].
+Combining learning with bio-inspired representations of
+neural circuits allows for higher centers to modulate and
+coordinate gaits [36]-[38], which can also result in the emer-
+gence of terrain-driven gait transitions to successfully cross
+variable gaps [5], [39]. As an alternative to learning-based
+control, quadruped robots have also demonstrated gait gen-
+eration and transitions can occur through simple force feed-
+back, without explicit coupling between oscillators [6], [40].
+
+A. Contribution
+
+While gait transitions can occur through sensory
+feedback [6] and/or through descending drives [7]. in
+this paper we take a coupling-driven approach to learn to
+locomote with, and transition between, a variety of gaits.
+Coupling between different abstract oscillators is commonly
+used for CPG-based locomotion control of different gaits in
+bio-inspired robotics [20], [21], [41].
+
+While several common quadrupedal gaits have been
+successfully demonstrated on quadruped hardware, previous
+work requires either explicit parameter tuning in MPC [16],
+extensive reward function tuning [17], [25], specific training
+schemes [29], or expert demonstrations from animals or
+MPC to imitate [34]. In contrast, we show all quadruped
+gaits and their transitions can be realized without reward
+function tuning or any expert demonstrations.
+
+We center our scientific investigation around three
+fundamental biological and robotics locomotion questions:
+
+1. Which gaits are most efficient at which velocities, and
+when should gait transitions occur?
+
+2. How should parameters like body height, posture, and
+swing foot trajectories change for different gaits at
+different velocities?
+
+3. Can we produce novel gaits not seen during training,
+and how robust is the policy to leg failures?
+
+In order to answer these questions, we present a hierar-
+chical bio-inspired architecture consisting of a policy trained
+with DRL (higher centers), a network of coupled oscillators
+mapped to task space foot trajectories (rhythm generator
+and pattern formation layers of the spinal cord), and sensory
+feedback from onboard sensors and internal CPG states
+(efference copy of the spinal cord). We explicitly enforce a
+gait through the coupling matrix, and the locomotion style
+through the pattern formation parameters (i.e. body height,
+swing foot ground clearance, foot offsets). We leverage this
+
+architecture to produce all quadrupedal gaits, determine when
+the optimal transitions between gaits should occur, and with
+which locomotion style. Additionally, we are able to realize
+novel gaits that were not seen during training, and have not
+been previously shown, without any modifications directly
+in hardware experiments. Furthermore, our framework is
+robust to failures of either one or two disabled legs.
+
+The rest of this paper is organized as follows. In
+Section II we present AllGaits, including our design choices
+and integration of Central Pattern Generators into the deep
+reinforcement learning framework to learn to locomote
+with all quadruped gaits. In Section III we discuss results
+and analysis from learning our controller and sim-to-real
+transfers, and we give a brief conclusion in Section IV.
+
+II. LEARNING CENTRAL PATTERN GENERATORS
+FOR ALL QUADRUPEDAL GAITS
+
+In this section we describe our CPG-integrated reinforce-
+ment learning framework and design decisions for learning
+locomotion controllers to produce all quadrupedal gaits. Fig-
+ure 2 shows an overview of our framework and the parallel
+with biological systems, where output from higher centers
+(the policy network) modulates the spinal cord (rhythm
+generation and pattern formation layers), finally actuating
+the motors (muscles). We use CPG-RL [36] as a basis,
+where now we include coupling matrices to define each of
+the following gaits: Walk, Amble, Trot, Pace, Bound, Pronk,
+Canter, Transverse Gallop, and Rotary Gallop (Figure 3).
+
+A. Rhythm Generation and Pattern Formation
+
+The abstract oscillators which form our Rhythm
+Generation layer are defined as:
+
+_ (" . ) 1
+
+fi=a 4(.“1*71)*71 [S]
+
+Wit Y rswisin(0;—0;—64) )
+
+where 7; is the current amplitude of the oscillator, 6; is the
+phase of the oscillator, y; and w; are the intrinsic amplitude
+and frequency, a is a positive constant representing the
+convergence factor. Couplings between oscillators are
+defined by the weights w;; and phase biases ¢;;. For a
+quadruped robot with a single oscillator corresponding
+to each leg, the coupling matrices ® can be defined by
+following the timings from Figure 3. The row/column order
+is Front Right (FR), Front Left (FL), Hind Right (HR),
+Hind Left (HL). These matrices define the offsets between
+different oscillators to converge to the desired gaits. With
+appropriately high (strong) coupling weights, i.e. w;; = 10,
+these coupling matrices enforce the gait.
+
+As in CPG-RL [36], to map from the oscillator states to
+Jjoint commands, we first compute corresponding desired foot
+positions, and then calculate the desired joint positions with
+inverse kinematics. The desired foot position coordinates
+are given as follow:
+
+Zi oot = To f f — Astep(ri —1)cos () 3)
+
+) =h+tgesin() if sin(0;) >0
+T “htgpsin(0;)  otherwise
+
+“)
+Higher Centers
+(Policy)
+
+Central Feedback (efference copy)
+.00
+
+Fig. 2: AllGaits: Control architecture for learning central pattern generators to locomote at all gaits for quadruped robots. The observation cor
+velocity commands, proprioceptive measurements, and the current CPG states (efference copy of the spinal cord), which the policy network uses to
+
+e
+Body Height, Ground
+Clearance, Foot Offset
+
+Body Orienttion,
+Lin/Ang. Velociies
+
+CPG parameters 1 and w for each leg i (Front Right (FR), Front Left (FL), Hind Right (HR), Hind Left (HL)) to coordinate the Rhythm Generation.
+A gait coupling matrix is input from the user to set a particular gait. The resulting CPG states are then mapped to desired foot positions in a Pattern
+
+Formation layer, which the user can also directly modulate by
+
+ting body height h, swing foot ground clearance ge. and foot offset from the hip
+‘This task-space mapping is then converted to desired joint angles with inverse kinema
+
+and finally tracked with joint PD control to produce torques
+
+7. The control policy selects actions at 100 Hz, and all other blocks operate at 1 kHz.
+
+o o O, O
+
+025
+Lateral Sequence Walk
+
+075 03 05 00
+Amble
+
+05 o 00 o5
+
+Trot Pace
+
+Fig. 3: Contact timing for each foot with the ground as a percentage of a single gait cycle for various quadruped gai
+‘Trot, Pace, Bound, Pronk, Canter, Transverse Gallop (T.G.), Rotary Gallop (R.G.). These timings are converted to matri
+between different limbs in column order: Front Right (FR). Front Left (FL), Hind Right (HR), Hind Left (HL),
+
+where dtep is the maximum step length, x,fy is the foot
+offset with respect to the hip, h is the robot height, g. is
+the max ground clearance during swing, and g, is the max
+ground penetration during stance. A visualization of the
+foot trajectory for a set of these parameters is shown in the
+Pattern Formation block of Figure 2.
+
+We re-sample h, T,/ 7, ge, and g, during training so the
+agent can learn to locomote with varying base heights, foot
+offsets, swing foot ground clearances, and stance foot ground
+penetrations. We use the following ranges during training:
+h € [0.18,0.35], zor; € [~0.08,0.03], g. € [0.02,0.12],
+9p€[0,0.015]. Thi important to vary in order to find the
+optimal combination, which is unlikely to be the same for
+each different gait. The agent does not receive any explicit
+observation of these parameters, and the user can specify
+each of these parameters during deployment.
+
+B. Markov Decision Process
+
+1) Action Space: As in CPG-RL [36], our action space
+provides an interface for the agent to directly modulate the
+intrinsic oscillator amplitudes and phases, by learning to
+modulate ; and w; for each leg. This allows the agent to
+adapt each of these states online in real-time depending on
+sensory inputs. However, in contrast with our previous work,
+the strong coupling enforces the relative offsets between dif-
+ferent oscillators, meaning the agent is forced to learn param-
+eters to locomote with each particular gait. During training,
+we resample the coupling matrices randomly among each of
+the 9 gaits so the agent can learn to locomote with all gaits, as
+well as transition between different gaits without falling. Our
+action space can be summarized as a = [p.w] € R®. The agent
+selects these parameters at 100 Hz, and we use the following
+
+O
+
+Bound
+
+©) O O O
+
+05 00 00 00 03 00 01 0o 01
+
+Pronk Canter  Transverse Gallop  Rotary Gallop
+
+teral Sequence Walk, Amble,
+s that denote phase offsets
+s they appear in Equation 2.
+
+TABLE I: Reward function terms. (-)" represens a desired command, and
+F(w):=exp(~ ). dt=0.01 is the control policy time step.
+
+Name Formula Weight
+Tinear velocity tracking v, J(v;., Vo) 3dt
+Linear velocity penalty vy, ;- =g y=I? 2dt
+
+Angular velocity penalty wp py>  —||wp 2y 2] 0.1dt
+
+Power |7l 0.001d¢
+
+action space ranges during training: € [1,2], w€[0,8] Hz.
+
+2) Observation Space: As in the full observation space of
+our previous work [36], our observation space includes veloc-
+ity commands, the body state (orientation, linear and angular
+velocities), joint state (positions, velocities), and foot contact
+booleans. We also include the last action chosen by the policy
+network and CPG states (i.e. efference copy of the spinal
+cord) {r,#,0,0} as feedback to the policy (i.c. higher cen-
+ters). Notably, the agent is not directly aware of any coupling
+matrices (i.e. gaits), nor mapping parameters h, Zof 5, ges Gp-
+
+3) Reward Function: Similarly to CPG-RL [36], our
+reward function primarily rewards tracking body linear
+and angular velocity in the base frame. Since in this work
+we focus on learning gaits during forward locomotion,
+in addition to forward velocity tracking, we add terms to
+minimize other undesired base velocities (lateral/vertical
+oscillations in the base y and z direction, and base roll,
+pitch, and yaw rates). To minimize energy consumption, we
+penalize the total power. The terms and respective weights
+are summarized in Table I. We emphasize that we do not
+need to add any reward terms beyond those fully specifying
+the base motion behavior. Notably, we do not need to
+specify any ‘style’ rewards to try to enforce any particular
+gait, base height, foot ground clearance, etc.
+
+C. Training Details
+
+We use Isaac Gym and PhysX as our training environment
+and physics engine [42], [43], and the Unitree Gol
+quadruped [44]. This framework has high throughput,
+enabling us to simulate 4096 Gols in parallel on a single
+NVIDIA RTX 3090 GPU, which allows us to learn
+control policies within minutes with the Proximal Policy
+Optimization (PPO) algorithm [45]. We use the same
+hyperparameters and neural network architecture as in [36].
+
+We train on flat terrain, and we reset the environment
+for an agent if the base or a thigh comes in contact with
+the ground, or if the episode length reaches 20 seconds.
+With each reset, we sample new parameters %, g, g, and
+2,f¢ for mapping the oscillator states to motor commands,
+allowing the agent to learn continuous locomotion behavior
+at varying body heights, step heights, and postures. New
+velocity commands v;, are sampled every 5 seconds, and
+the gait coupling matrix & is re-sampled every 3 seconds.
+As in our previous work, we apply domain randomization
+on the physical mass properties and coefficient of friction
+(Table 1I). Finally, an external push of up to 0.5 m/s is
+applied in a random direction to the base every 15 seconds.
+
+The policy network outputs modulation signals at 100
+Hz, and the torques computed from the mapped desired
+joint positions are updated at 1 kHz. The equations for each
+of the oscillators (Equations 1-2) are thus also integrated
+at 1 kHz. During training we re-sample joint PD controller
+gains at each environment reset as described in Table II.
+
+I1I. EXPERIMENTAL RESULTS AND DISCUSSION
+
+In this section we report and discuss results from learning
+a single controller capable of locomotion with each of the 9
+gaits. Sample locomotion policy deployment snapshots are
+shown in Figure 1, and the reader is encouraged to watch
+the supplementary video for clear visualizations.
+
+A. Gait Style Parameter Efficiency
+
+We first investigate the effects of different gaits and style
+parameters on the Cost of Transport (COT). After training,
+we consider the following style parameters (body height h,
+foot ground clearance g., foot offset x,) for each gait:
+
+h={0.18, 0.22, 0.26, 0.30, 0.34}
+9.=1{0.02, 0.05, 0.08, 0.12}
+Zofr={—0.075, —0.05, —0.025, 0.0, 0.025}
+
+For each of the possible 100 combinations of these three
+parameters, we command the robot to locomote at 0.3 m/s
+to 3.0 m/s, in increments of 0.1 m/s. For each of these
+28 velocities, we run the policy for 5 seconds across 100
+robots in parallel, and compute the mean Cost of Transport.
+For the purpose of this data collection, we do not include
+any noise in the simulation environment.
+
+Figure 4 shows the effects of varying the three parameters
+on the Cost of Transport, with respect to baseline parameters
+seen in previous works such as [36]: h = 0.3, g. = 0.05,
+Zo55 = 0, shown by the black line. Figure 4-A shows the
+effects of different nominal body heights, from 0.34 m to
+0.18 m, on the Cost of Transport. As can be expected,
+
+TABLE II: Randomized parameters during training and their ranges.
+
+Parameter Lower Bound _ Upper Bound _ Units
+v, 02 3 w/s
+Toint Gain K, 30 100 B
+Joint Gain Ky 05 2 )
+Mass (each body k) 70 130 %
+Added base mass 0 5 kg
+Coeflicient of friction 03 1 B
+
+a more upright posture generally leads to more efficient
+locomotion, with lower COT, as less power is needed at
+the thigh and knee joints to maintain the body height.
+While almost all gaits have the lowest COT throughout
+all velocities for the highest, most upright posture, the
+pronk gait is a notable exception, with the most efficient
+locomotion for a slightly lower nominal base height
+parameter, 0.3 m. However, many gaits have an almost
+identical COT curve when locomoting with body height 0.3
+m or 0.34 m. In the video, we also investigate the effects
+on the COT of changing the nominal swing foot ground
+clearance from 0.02 m to 0.12 m. As can be expected, a
+lower swing foot ground clearance results in a more efficient
+gait, as it requires more energy to bring the foot higher off
+the ground, and this trend is consistent across all gaits.
+Figure 4-B shows the effects of changing the nominal
+center point around which the oscillations take place with
+respect to the hip in the z direction range from —0.075 m
+behind the hip, to 0.025 m in front of the hip. Due to the
+configuration of the legs and body, the overall Center of Mass
+(COM) of the robot lies behind the geometric center of the
+body. Therefore, an offset behind the hips helps to keep the
+COM more at the center of the foot contacts, thereby (gen-
+erally) decreasing energy required to remain upright during
+locomotion. While there is more variability among gaits, and
+even within a single gait as the locomotion velocity changes,
+a general observation is that it is more energy-efficient to
+locomote with the oscillation 2 center point behind the hips.
+
+B. Which Gaits and Styles are Most Energy-Efficient?
+
+Based on the 100 gait styles considered for each of
+the 9 gaits, we present the optimal, most energy-efficient
+locomotion possible for each of the 9 gaits with our
+framework. Figure 5 shows the best possible COT for every
+gait at every velocity at top, and the corresponding gait
+style parameters at bottom. Between gaits, the walk gait
+is most energy-efficient from 0.3-0.9 m/s, and then the
+pace gait results in the lowest COT from 0.9-3.0 m/s,
+while the amble gait is second most-efficient in this range.
+This implies that, contrary to the popular association of
+modern quadruped robots to dogs or cats, the most efficient
+locomotion style for our robot makes it closer to a giraffe,
+camel, elephant, or other pacing and ambling animals.
+
+Notably, as also seen in nature, as locomotion speed
+changes, different gait styles are more optimal from an
+energy-efficiency perspective. For all gaits, there does not
+exist a single set of gait parameters that is optimal at all
+velocities. However, there are certain important trends. As
+suggested in the examples in Figure 4, the most optimal
+parameters at all velocities all use the lowest ground
+clearance, 0.02 m. For most gaits, especially at higher
+®- Walk N ‘Amble N Trot N Pace ) Bound
+8 pronk Caner | TansveseGalop | RoayGaiop i S
+=
+s s & —a
+. . h [20rs=00)
+Velosty (mis)
+Amble ) Trot
+S &_s
+Canter . Transverse Gallop
+Velosty (mis)
+
+Fig. 4: Effects on the Cost of Transport for all gaits from modulating nominal (A) body height. and (B) foot offset relative to the hip around which
+oscillations occur. While the policy is capable of locomotion with all of these gait styles (with notable difficulty for the pronk gait with foot offset
+0.025 m_in front of the hip above 2 m/s). each of these parameters significantly affects the COT, and different combinations of these result in better
+
+energy-efficiency at different velocities, most obviously with respect to the foot offset in (B).
+
+Most Optimal COT for All Gaits
+
+®
+
+08
+
+01
+
+08
+
+m ; D FR— H
+Vet ()
+oy
+e 5
+Trot yed
+Faco oo
+s
+-o0zs
+[ 0028 0
+Garr B
+Tcato Er v
+ catoy “ours
+
+KRNI
+
+Vetoty ()
+Fig. 5: Most optimal Cost of Transport (COT) for all quadruped gaits, and
+corresponding gait style parameters for all velocities with our framework.
+(A): minimum COT possible for each gait. Walk is most optimal for veloci-
+ties below 0.9 /s, and pace is most optimal for higher velocities. (B): cor-
+responding gait style parameters for the minimum COTs in (A), with varying
+body heights h and foot offsets @,y for all gaits. The lowest COTS here
+were all achieved with the lowest swing foot ground clearance g =0.02 m.
+
+o
+
+P
+
+speeds, the highest nominal body height 0.34 m gives the
+most efficient locomotion. However, we see variability in
+the hip offset, which changes most variably within each gait
+as a function of speed to subtly improve the COT.
+
+One interesting observation for the pronk gait is the reverse
+curvature with respect to nominal COT plots, which typically
+have positive parabola-like shapes, with a minimal COT
+at a particular velocity. For the pronk gait, at low speeds,
+the policy has learned to modulate the CPG parameters to
+slowly lean forward, then take a short and fast hop, to more
+efficiently track the mean desired velocity. This is further
+shown in Figure 6 by the mean CPG amplitude and frequency
+selected by the policy to locomote as a function of speed,
+which changes for each gait and style. The amplitude and
+frequency of the oscillators directly correspond to mean step
+
+—Wak —Pronk
+—Amble — Canter
+1 —Tot —T.Galop
+
+—Pace R Galop
+—Bound
+
+Mean Oscilator Ampliudes
+
+s s
+
+Velosity (m's)
+Mean oscillator amplitudes and frequencies for style parameters
+. ge = 0.02, wopf = —0.075, which is optimal for many gaits
+and at many velocities. Notably, the policy coordinates the amplitudes and
+frequencies differently for different gaits.
+
+25 3 s 2
+
+Velocity (mis)
+
+25 3
+
+Fig.
+
+length and mean step frequency. Interestingly, we see several
+inflection points for several gaits, where the strategy changes
+for increasing locomotion speed. This is most obvious for
+the pace and amble gaits, which actually decrease the step
+frequency at higher speeds, while instead locomoting faster
+by increasing the step length. The policy has learned this
+different coordination among gaits in order to maximize the
+returns from our reward function, and without explicit knowl-
+edge of the coupling parameters or gait style, but which it can
+indirectly deduce through observing the CPG and joint states.
+Thus, our framework can also be used as a tool to evaluate
+different locomotion strategies given a particular gait.
+
+C. Is Energy-Efficiency the Most Important Gait Metric?
+While energy-efficiency is often the most popular expla-
+nation for different gait styles at different speeds, why do
+walk and pace gaits not naturally emerge when training loco-
+motion policies with end-to-end deep reinforcement learning
+for quadruped robots? Indeed, most recent results that learn
+robot locomotion on flat or rough terrain show a trot gait
+both at high and low velocities [9], [30], [31]. [43]. However,
+in addition to velocity tracking, typically the reward function
+includes many terms related to base stability to keep smooth
+motions, minimize joint accelerations, limit large forces,
+keep the feet underneath the hips, and promote foot air time

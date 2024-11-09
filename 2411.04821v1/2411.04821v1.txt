@@ -1,0 +1,516 @@
+2411.04821v1 [cs.CV] 7 Nov 2024
+
+arXiv
+
+Noname manuscript No.
+(will be inserted by the editor)
+
+End-to-end Inception-Unet based Generative Adversarial
+Networks for Snow and Rain Removals
+
+Ibrahim Kajo* . Mohamed Kas* - Yassine Ruichek
+
+Received: date / Accepted: date
+
+Abstract The superior performance introduced by deep
+learning approaches in removing atmospheric particles
+such as snow and rain from a single image; favors their
+usage over classical ones. However, deep learning-based
+approaches still suffer from challenges related to the
+particle appearance characteristics such as size, type,
+and transparency. Furthermore, due to the unique char-
+acteristics of rain and snow particles, single network
+based deep learning approaches struggle in handling
+both degradation scenarios simultaneously. In this pa-
+per, a global framework that consists of two Generative
+Adversarial Networks (GANs) is proposed where each
+handles the removal of each particle individually. The
+architectures of both desnowing and deraining GANs
+introduce the integration of a feature extraction phase
+with the classical U-net generator network which in
+turn enhances the removal performance in the presence
+of severe variations in size and appearance. Further-
+more, a realistic dataset ! that contains pairs of snowy
+images next to their groundtruth images estimated us-
+ing a low-rank approximation approach; is presented.
+The experiments show that the proposed desnowing
+and deraining approaches achieve significant improve-
+ments in comparison to the state-of-the-art approaches
+when tested on both synthetic and realistic datasets.
+
+Keywords Single image desnowing - Single image
+deraining - GAN - inception network - collaborative
+generator - SVD
+
+Ibrahim Kajo, Mohamed Kas, and Yassine Ruichek
+
+CIAD, UMR 7533, Univ. Bourgogne Franche Comté,
+UTBM, F 25200, Montbéliard, France. E-mail:
+ibrahim kajo@utbm.fr, ~ E-mail:  mohamed kas@utbm.fr,
+E-mail: yassine.ruichek@utbm.fr.
+
+*Authors contributed equally.
+
+1 Inception-UNet-GAN-for-Snow-and-Rain-Removals
+
+1 Introduction
+
+The Performance of several computer vision applica-
+
+tions such as object detection, object tracking, and
+mantic segmentation is highly dependent on the percep-
+tual as well as the visual quality of the processed im-
+ages. Therefore, bad weather conditions such as rain,
+fog, and snow have a negative impact on most im-
+age/video processing algorithms due to the image degra-
+dations caused by such conditions. Numerous learning-
+based approaches show better restoration performance
+in the presence of different weather degradations such
+as rain (Yang et al., 2020) and snow (Liu et al., 2018),
+(Chen et al., 2020) when compared to hand-crafted
+video based ones (Tian et al., 2018; Santhaseelan and
+Asari, 2015). Due to the difficulty of obtaining pairs
+of degraded images and their corresponding clean im-
+ages, the majority of learning-based approaches includ-
+ing GANs are trained, tested and evaluated on datasets
+that consist of pairs of clean images and their synthetic
+degraded images. However, synthetic images fail to pro-
+vide the level of authenticity that realistic images have.
+Hence, training networks on such synthetic datasets
+
+ends up in techniques that perform well on images de-
+graded by synthetic rain masks, while fail drastically
+when they are applied on realistic images (Li et al.,
+2021). Moreover, the availability of realistic test images
+allows more effective and accurate evaluation of exis
+
+ing deraining and desnowing approaches. For example,
+a recent study (Yang et al., 2020) that re
+of the state-of-the-art deraining approaches shows that
+
+ewed most
+
+only two techniques (out of 27 reviewed) are trained
+and quantitatively evaluated using realistic datasets. To
+address this challenge, Wang et al. (2019a) introduced
+a large-scale realistic rain/rain-free dataset for train-
+
+ing and evaluating learning-based deraining techniques.
+
+Ibrahim Kajo* et al.
+
+Despite the availability of such an efficient dataset, a
+significant number of deraining approaches (Zhu et al.,
+2020; Chen et al., 2014; Ahn et al., 2021; Jiang et al.,
+2020a; Huang et al., 2021) have not considered this
+dataset (or other realistic datasets) for training bet-
+ter models or evaluating them quantitatively. On the
+other hand, the existing desnowing approaches lack the
+availability of a testing dataset that consists of realistic
+snow /snow-free pair images that contain a large variety
+of snowflakes in terms of size and appearance.
+
+Most recently, different G ANs based approaches have
+been proposed for single image desnowing and deraining
+where distinct architectures, descriptors, and loss func-
+tions are introduced (Cai et al., 2021; Ding et al., 2021;
+Zhang et al., 2019). Generally, a single GANs frame-
+work consists of a generator network and a disc:
+tor network, which mainly judges the image generated
+by the generator whether it is real or fake. However, the
+generator is also guided by several loss functions that
+provide meaningful feedbacks about the accuracy of its
+generated images. Multiscale pixel-level loss, structural
+similarity index (SSIM) loss, refined perceptual loss,
+and multiscale perceptual loss are good examples of
+such loss functions that are classically added to the ob-
+jective function of a GANs framework. However, such
+loss functions are region blind, where snow /rain-free re-
+gions have the same impact as regions with snow/rain
+on minimizing the generation loss. In other words, the
+generator is not well guided to focus on the regions that
+are mainly occupied by snow/rain particles. Therefore,
+we manage in this paper to tackle this challenge by in-
+troducing a spatially guided loss that forces the genera-
+tor to pay more attention to the snow/rain regions. This
+is mainly achieved by defining a loss that measures the
+similarity between the generated and the ground-truth
+snow /rain maps rather than their pixel-wise images.
+
+mina-
+
+Due to the unique aspects of snowflakes compared
+to rain drops in terms of size, shape, and level of trans-
+parency, most learning-based approaches that are de-
+signed to remove snowflakes cannot simultancously re-
+move the rain streaks and vice versa. Therefore, de-
+veloping one model that represents all image degrada-
+tions caused by both rain and snow is a non-trivial task.
+Hence, we introduce a deraining/desnowing framework
+that consists of two degradation removers. The input
+images are fed into the corresponding network to re-
+move the occurred degradation. In this paper, the pro-
+posed desnowing and deraining networks are designed
+based on the GANs architecture. However, each net-
+work has its unique architecture, generator and discrim-
+inator networks, and loss function that make them fun-
+damentally different from other existing deraining and
+
+desnowing GANs. More specifically, the contributions
+of the paper are as follows:
+
+— A novel architecture that introduces the usage of a
+feature extraction phase to the classical U-net gener-
+ator network; is proposed. Such a modification en-
+hances the image generation performance in han-
+dling a variety of sizes and appearances of snow and
+rain particles.
+
+— A novel GAN architecture that allows the collabo-
+ration between two generators to derain and refine
+complex rainy images is introduced.
+
+— Two novel loss functions that respect the unique
+characteristics of both snowflakes and rain particles;
+are designed to spatially guide the GAN generators
+to focus its removal performance toward corrupted
+region:
+
+— A realistic test dataset for evaluating desnowing learn-
+ing approaches is introduced where it is generated
+based on video-based low-rank approximation and
+human supervision.
+
+2 Related work
+2.1 Desnowing techniques
+
+Due to their efficient generalization abilities, learning
+based techniques have been recently employed to re-
+move snowflakes, rain streaks, and rain drops. How-
+ever, researchers tend to propose unique removal net-
+works that consider the unique characteristics of each
+particle separately. Liu et al (2018) proposed the first
+learning based technique that is dedicated for remov-
+ing snowflakes from a degraded image. They designed a
+multistage network named DesnowNet to deal with im-
+ages that are degraded by both translucent and opaque
+snowflakes. The first stage of their network considers
+recovering the translucent snowflakes using a translu-
+cency recovery (TR) module while the second stage
+considers recovering the opaque snowflakes employing
+the residual generation (RG) module. Tn order to train
+their network, they proposed the first dataset that con-
+tains enough synthetic snowy images along with their
+snow masks and ground-truths in addition to a real-
+istic testing dataset with no ground truth provided.
+Chen et al. (Chen et al., 2020) proposed a single im-
+age desnowing model that considers several appearance
+characteristics such as size, transparency, and veiling ef-
+fect. Their framework starts with an identifier that con-
+sists of three end-to-end networks to detect and classify
+the snowflakes into small, medium, and large particles.
+Additionally, a dark channel based prior layer is em-
+bedded into an end-to-end network to help deal with
+End-to-end Inception-Unet based Generative Adversarial Networks for Snow and Rain Removals
+
+the veiling effect. The detected initial snow masks and
+the veiling effect-free images are further processed by
+a transparency-aware snow removal model that is in-
+spired by an inpainting mechanism to recover the orig-
+inal pixels occluded by non-transparent snowflakes. To
+optimize the results, a size-aware discriminator is de-
+signed to discriminate between snowy and snow-free
+images. Jaw et al (2020) introduced a dual pathway de-
+scriptor that extracts the semantic features via a bottom-
+up pyramidal pathway and aggregates the features ex-
+tracted at different resolutions to provide more accurate
+location information that enhances the snow removal
+process and reduces the computational burden. Their
+snow removal network is followed by a GAN based re-
+finement stage to provide more detailed images.
+
+However, all aforementioned learning approaches are
+trained and quantitatively evaluated using only syn-
+thetic datasets since real ground-truth images are not
+available. To fill this gap in this research area, we intro-
+duced a realistic dataset that consists of real snow /snow-
+free images estimated by a video-based low-rank ap-
+proximation approach. This dataset can be combined
+with other synthesis snowy images to enrich the learn-
+ing process during training and provides a chance to
+test and quantitatively evaluate the proposed desnow-
+ing approaches including the proposed one.
+
+2.2 Deraining techniques
+
+There are several deraining learning techniques which
+have been proposed recently in the literature (Yasarla
+et al., 2020; Wang et al., 2020a,c,b, 2019b). Yang et
+al. (2017) introduced a single image deraining frame-
+work in which the rain streak regions are detected and
+added as a binary map to the developed model. The de-
+tected rain streaks are accumulated to simulate the at-
+mospheric veil so the designed framework can generate
+more accurate visual results. In their network, a con-
+textualized dilated network is developed to extract the
+discriminative rain features and enhance the stages of
+rain detection and removal. To handle real-world rain
+images and visually enhance the background layer, a
+cascade of several convolutional joint networks of rain
+detection and removal is recurrently employed. Fu et
+al. (2017b) proposed a single image deraining deep de-
+tail network with an architecture inspired by the deep
+residual network (ResNet). They introduced a lossless
+negative residual mapping to replace the traditional loss
+function used in ResNet model. Their negative mapping
+is computed based on the difference between the rainy
+image and the rain-free image reducing the range of
+the pixel values which in turn speeds up the derain-
+ing learning process. The input image is converted into
+
+a detailed layer using a high-frequency filter which in
+turn is fed to the parameter layer to predict the rain
+mask.
+
+However, the majority of the deraining learning based
+techniques were trained on synthesized datasets with
+limited realism in respect to rain characteristics such as
+appearance, direction and transparency. To address the
+problem related to the availability of realistic training
+paired images, Lin et al. (2020) introduced a deraining
+approach inspired by data distillation principles. The
+proposed approach does not require paired images for
+training where unpaired set of rainy and clean images
+is utilized. The clean images are synthesized with the
+same rain masks that degrade the input images. To
+achieve this purpose, blurred rain-free images are fed
+into an enhancement learning block that extracts both
+the rain and the detail layers. The extracted rain layers
+are added to the clean images, and the degraded im-
+ages are fed back into a deraining network to correctly
+generate the rain mask of the input images. Following a
+different approach, Wang et al. (2019a) utilized a semi-
+automatic filtering method that incorporates both tem-
+poral priors and human supervision to generate a large
+training dataset with accurate ground-truth images at
+high resolution and free of rain degradation. Further-
+more, they proposed a spatial attentive rain removal
+network guided by recurrent neural networks with RelU
+and identity matrix initialization (IRNN). The intro-
+duced dataset provides a helpful tool to train robust
+and efficient learning models that can be implemented
+in real-world scenarios. However, their network intro-
+duces an expensive computational complexity in terms
+of memory where a large number of learnable parame-
+ters is used.
+
+The success of GANs based frameworks in generat-
+ing visual appealing results has inspired researchers to
+propose and explore dozens of GANs’ architectures for
+image synthesize purposes including desnowing (Zhang
+et al, 2019; Li et al., 2019). Zhang et al. (2019) em-
+ployed a GAN guided by a refined perceptual loss to en-
+hance the structure awareness ability of the refinement
+performance of their proposed deraining approach. Cai
+et al.(2021) introduced a depth-density based GAN guided
+by the depth and density information provided by an-
+other network in order to achieve better rain streak
+and fog removal performance. Ding et al (2021) pro-
+posed a GAN that accepts 3D light field images (LFT)
+as input where the disparity maps are first estimated
+and the rain streaks are extracted via two branched
+autoencoders. This approach successfully takes full ad-
+vantage of the structural information embedded in LFIs
+to remove the rain streaks. Li et al. (2020) proposed
+a method that can handle rainy, snowy, and foggy im-
+
+Ibrahim Kajo* et al.
+
+ages using a single network with three dedicated encod-
+ing streams that process the same input image. Unlike
+typical adversarial learning, the introduced discrimina-
+tor architecture is utilized to identify the degradation
+type in addition to the status of the image (clean or
+noisy). However, such a solution employs more sophisti-
+cated decoding architectures and feature search strate-
+gies in order to take all the encoding streams of multi-
+ple degradations into account, imposing more compu-
+tational burdens in terms of memory and time.
+
+The generators of all these deraining GANs are guided
+by region-blind loss functions, where the majority of
+these losses are designed to measure the similarity be-
+tween the generated image and its groundtruth at pixel
+levels . Tn addition to this, our proposed deraining GAN
+consists of two generators where the first one is spatially
+guided to focus on recovering the background pixels of
+the regions occupied by the rain particles, while the
+second generator’s task is to visually enhance the re-
+sult estimated by the first generator.
+
+3 Proposed autoencoder of a generator network
+3.1 Brief overview of GANs
+
+As mentioned earlier in this paper, we propose two con-
+ditional GAN-based networks to retrieve the original
+clean image C' from a degraded image X in the case
+of rain and snow scenarios. Both the desnowing and
+deraining frameworks consist of a GAN-based archi-
+tecture, The generative adversarial networks have been
+proposed in the first time by Godefellow (2014) as a tool
+to generate new images that look like images belonging
+to the target space. The networks developed based on
+the GAN principles are designed to model certain data
+distributions. To achieve this purpose, a generator net-
+work G is employed to regenerate samples that share
+the same data distribution of the target data. Addi-
+tionally, a discriminator network D is incorporated to
+measure the probability of the generated samples hav-
+ing the same data distribution or not. Based on the
+game theoretic min — maz principle, the generator and
+discriminator are typically learned jointly by alternat-
+ing the training of D and G.
+
+3.2 End-to-end Inception-Unet based generator
+
+The generator network G relies on autoencoder archi-
+tecture, where U-Net (Romneberger et al., 2015) and
+ResNet-Blocks (He et al., 2016) architectures are widely
+used by the majority of the state-of-the-art GANs. The
+
+concept of U-Net architecture is to supplement a down-
+sampling stream by symmetric layers (decoding) where
+traditional pooling operations are replaced by trans-
+posed convolution-based upsampling giving the final ar-
+chitecture the shape of letter U. As a result, these lay-
+ers increase the resolution of the decoded output with
+more precision thanks to the skip connections. More-
+over, U-Net provides a large number of feature chan-
+nels in the upsampling part, which allows the network
+to propagate context information to higher resolution
+layers. All the U-Net variants share the same pipeline,
+the only difference is the supported image size which is
+controlled by the amount of GPU memory where most
+of the frameworks consider the resolutions of 256 and
+128.
+
+On the other hand, ResNet-based generator net-
+works adopt residual blocks to compute relevant fea-
+tures from the input images. Hence, the input image
+is downsampled generally by 2 or 3 before the resulted
+
+convoluted feature maps are fed into residual sub-networks
+
+referred to as ResNet-Blocks. Afterwards, the output
+of a sequence of ResNet-Blocks is upsampled to reach
+the desired size of the generator output. However, both
+architectures have their limitations in terms of compu-
+tational complexity and implementation. For example,
+the U-Net generator suffers from several converging dif-
+ficulties during training due to the lack of deeper feature
+extraction blocks. On the other hand, ResNet based
+generators suffer from a major drawback where the re-
+sultant images are blurred despite the presence of their
+feature extraction sub-blocks. Moreover, ResNet gener-
+ators have no skip connections which are very beneficial
+especially when the target and input images share some
+visual features, as the case in our task.
+
+To tackle these challenges
+inspired architecture, called U-shaped inception-based
+network (U-IncNet), that includes additional feature
+extraction blocks which link the downsampling and up-
+sampling streams. The feature extraction sub-blocks in-
+volve several Inception.v3 (Szegedy et al., 2015) mod-
+ules. In contrast to Resnet block, Inception.v3 module
+computes the convolution responses with multi-kernel
+sizes: {(1 x 1),(3 x 3),(5 x 5),(7 x 7)}. These filters
+are concatenated to form the final output of the Incep-
+modules. The choice of Inception.v3 module as
+feature extractor is based on its capabilities of captur-
+ing visual features at different scales thanks to the dif-
+ferent kernel sizes. Incorporation of Inception.v3 proves
+its significance in the field of deraining/desnowing ap-
+plications, where large kernels (5 x 5) and (7 x 7) help
+the model remove the large rain/snow patterns that
+may appear like parts of the background. Fig 1 shows
+the difference between the classical ResNet feature ex-
+
+we introduced a U-net
+
+End-to-end Inception-Unet based Generative Adversarial Networks for Snow and Rain Removals 5
+
+ResNet Block
+
+ConvK3n32s1
+
+(a) (b)
+
+Inception.v3 Module
+
+-
+
+Inception.v3.
+Modules for
+Feature Extraction
+
+(e)
+
+Fig. 1: Visual architecture-based comparison of: classical ResNet feature extraction mechanism (a), Inception.v3
+based feature extraction (b), and the proposed U-IncNet (c).
+
+traction mechanism (see Fig. 1 (a)) and Inception.v3
+based feature extraction (see Fig. 1 (b)) in addition
+to the proposed U-TneNet (see Fig. 1 (c)). Finally, the
+discriminator network D relies on a pixel classification
+architecture. Tt is based on a set of convolutions and ac-
+tivation layers that lead to a binary label (fake/real) for
+each pixel. The state-of-the-art discriminator networks
+demonstrated good performances in detecting fake and
+real images, and then granting prominent adversarial
+loss to the generator. In our work, we use the Pixel
+Discriminator architecture (Isola et al., 2017).
+
+4 Weather-degradation removal networks
+
+The appearance of a degraded image X due to rain or
+snow conditions is mathematically modeled as a sum-
+mation of two basic layers where the first layer repre-
+sents the original background, while the second layer
+represents the rain/snow layer. Additional layers are
+introduced to the appearance model to represent sev-
+eral accompanied atmospheric conditions such as fog,
+veiling effect, reflection, occlusion, and rain accumula-
+tion. To simplify the representation of the degradation
+problem, we assume that a degraded image X can be
+defined as follows:
+
+X=C+N (1)
+
+where C' refers to the degradation-free background im-
+age and N refers to the summation of all degradation
+layers including rain/snow and other accompanied at-
+mospheric conditions. The objective of the proposed
+desnowing or deraining network is to estimate the clear
+background image C' by removing the degrading layers
+N from the input image X. Our approach of snow/rain
+removal is based on handling each condition individ-
+ually. As highlighted earlier, splitting the conditions
+(rain/snow) allows efficient image enhancement as well
+as low computational cost. Hence, X is fed to the ap-
+propriate GAN to eliminate the degradations. This sub-
+section is divided into 2 subsections to explain in depth
+the architectures of the proposed Desnowing GAN and
+Deraining GAN.
+
+4.1 Proposed desnowing Network (SGAN)
+
+The SGAN is a combination of two convolutional neural
+networks (CNN) where the first one is an image genera-
+tor and the second is a pixel discriminator. Considering
+the snowy image X, as condition, the image generator
+G attempts to generate an image C' = G (X,) similar
+to its corresponding snow-free image C' by encoding the
+input image X, into a latent space with discriminant
+features. Then, the encoded image is upscaled recur-
+rently until producing the desired snow-free image C.
